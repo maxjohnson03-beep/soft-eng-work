@@ -64,6 +64,8 @@ async def move(x: int, y: int):
     except RobotConnectionError as exc:
         logger.warning("Move command failed: %s", exc)
         return {"error": str(exc)}
+    
+    
 
 
 # ── WebSocket telemetry ────────────────────────────────────────────────────
