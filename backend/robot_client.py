@@ -62,7 +62,26 @@ async def reset(self) -> dict[str, Any]:
 
 
     # TODO: add get_map(), get_sensors(), etc. as needed
-
+async def get_map(self): 
+    """Fetch the robot's current map data."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{self._base}/api/map", timeout=5.0)
+            response.raise_for_status()
+            return response.json()
+    except Exception as exc:
+        raise RobotConnectionError(f"Get map failed: {exc}") from exc
+    
+async def get_sensors(self):
+    """Fetch the robot's current sensor readings."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{self._base}/api/sensor", timeout=5.0)
+            response.raise_for_status()
+            return response.json()
+    except Exception as exc:
+        raise RobotConnectionError(f"Get sensors failed: {exc}") from exc
+    
 
 # Module-level singleton used by main.py
 robot = RobotClient()

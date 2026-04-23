@@ -102,7 +102,9 @@ jobs:
       # just a placeholder for your tests. Implement your actual test commands here, e.g. "pytest ..."
       - name: Run tests with coverage
         run: |
-          true
+          pip install -r backend/requirements.txt
+          pytest backend/tests
+          
 
 
   # ════════════════════════════════════════════════════════════════════════════
