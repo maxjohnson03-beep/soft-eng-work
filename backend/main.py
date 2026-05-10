@@ -6,10 +6,14 @@ import logging
 import os
 import asyncio
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.auth import create_access_token, hash_password, verify_password
+from backend.database import User, get_db
 from robot_client import robot, RobotConnectionError
+from models import RegisterRequest, LoginRequest
+
 
 
 # ── Configuration ───────────────────────────────────────────────────────────
@@ -79,3 +83,26 @@ async def ws_telemetry(websocket: WebSocket):
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:
         logger.info("Telemetry client disconnected")
+
+
+# ── User authentication (stub) ─────────────────────────────────────────────
+@app.post("/auth/register")
+async def register(request: RegisterRequest, db = Depends(get_db)):
+    user = db.query(User).filter(User.username == request.username).first()
+    if user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists")
+    hashed_password = hash_password(request.password)
+    new_user = User(username=request.username, hashed_password=hashed_password, role=request.role)
+    db.add(new_user)
+    db.commit()
+    logger.info("New user registered: %s", request.username)
+    return {"message": "User registered successfully"}
+
+@app.post("/auth/login")
+async def login(request: LoginRequest, db = Depends(get_db)):
+    user = db.query(User).filter(User.username == request.username).first()
+    if not user or not verify_password(request.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    access_token = create_access_token(data={"sub": user.username})
+    logger.info("User logged in: %s", request.username)
+    return {"access_token": access_token, "token_type": "bearer"}
