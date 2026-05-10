@@ -1,7 +1,7 @@
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
-from database import User, get_db
+from backend.database import User, get_db
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
@@ -13,6 +13,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def hash_password(plainpass):
+    print("RAW PASSWORD:", repr(plainpass), "LEN:", len(plainpass))
     return pwd_context.hash(plainpass)
 
 def verify_password(plain_password, hashed_password):

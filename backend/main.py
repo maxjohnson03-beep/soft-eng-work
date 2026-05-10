@@ -6,13 +6,13 @@ import logging
 import os
 import asyncio
 
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.auth import create_access_token, hash_password, verify_password
+from backend.auth import create_access_token, hash_password, require_commander, verify_password
 from backend.database import User, get_db
-from robot_client import robot, RobotConnectionError
-from models import RegisterRequest, LoginRequest
+from backend.robot_client import robot, RobotConnectionError
+from backend.models import RegisterRequest, LoginRequest
 
 
 
@@ -62,12 +62,24 @@ async def get_status():
 
 # ── Move robot ─────────────────────────────────────────────────────────────
 @app.post("/api/move")
-async def move(x: int, y: int):
+async def move(
+    x: int,
+    y: int,
+    current_user: User = Depends(require_commander)
+):
     try:
+        logger.info(
+            "Move command from user %s: (%s, %s)",
+            current_user.username,
+            x,
+            y
+        )
+
         return await robot.move(x, y)
+
     except RobotConnectionError as exc:
         logger.warning("Move command failed: %s", exc)
-        return {"error": str(exc)}
+        raise HTTPException(status_code=503, detail=str(exc))
     
     
 
@@ -87,15 +99,22 @@ async def ws_telemetry(websocket: WebSocket):
 
 # ── User authentication (stub) ─────────────────────────────────────────────
 @app.post("/auth/register")
-async def register(request: RegisterRequest, db = Depends(get_db)):
+async def register(request: RegisterRequest, db=Depends(get_db)):
     user = db.query(User).filter(User.username == request.username).first()
     if user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists")
+        raise HTTPException(status_code=400, detail="Username already exists")
+
     hashed_password = hash_password(request.password)
-    new_user = User(username=request.username, hashed_password=hashed_password, role=request.role)
+
+    new_user = User(
+        username=request.username,
+        hashed_password=hashed_password,
+        role="viewer"   
+    )
+
     db.add(new_user)
     db.commit()
-    logger.info("New user registered: %s", request.username)
+
     return {"message": "User registered successfully"}
 
 @app.post("/auth/login")
