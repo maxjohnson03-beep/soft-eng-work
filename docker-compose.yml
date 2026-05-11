@@ -82,6 +82,9 @@ services:
       # making the final image smaller and more secure.
       target: production
 
+    ports:
+    - "8000:8000"
+
     restart: unless-stopped
 
     # Environment variables are injected into the container at runtime.

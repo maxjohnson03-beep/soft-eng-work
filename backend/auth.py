@@ -1,7 +1,7 @@
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
-from backend.database import User, get_db
+from database import User, get_db
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
@@ -9,11 +9,15 @@ SECRET_KEY = "changethislater"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__default_rounds=12
+)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def hash_password(plainpass):
-    print("RAW PASSWORD:", repr(plainpass), "LEN:", len(plainpass))
     return pwd_context.hash(plainpass)
 
 def verify_password(plain_password, hashed_password):
@@ -47,3 +51,4 @@ def require_commander(current_user: User = Depends(get_current_user)):
     if current_user.role != "commander":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return current_user
+

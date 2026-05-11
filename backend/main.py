@@ -9,10 +9,10 @@ import asyncio
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.auth import create_access_token, hash_password, require_commander, verify_password
-from backend.database import User, get_db
-from backend.robot_client import robot, RobotConnectionError
-from backend.models import RegisterRequest, LoginRequest
+from auth import create_access_token, hash_password, require_commander, verify_password
+from database import User, get_db
+from robot_client import robot, RobotConnectionError
+from models import RegisterRequest, LoginRequest
 
 
 
@@ -100,6 +100,7 @@ async def ws_telemetry(websocket: WebSocket):
 # ── User authentication (stub) ─────────────────────────────────────────────
 @app.post("/auth/register")
 async def register(request: RegisterRequest, db=Depends(get_db)):
+    print("REGISTER ENDPOINT HIT WITH:", request.model_dump())
     user = db.query(User).filter(User.username == request.username).first()
     if user:
         raise HTTPException(status_code=400, detail="Username already exists")
