@@ -5,6 +5,7 @@ Ground Control Station — FastAPI application entry point.
 import logging
 import os
 import asyncio
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +14,6 @@ from auth import create_access_token, hash_password, require_commander, verify_p
 from database import User, get_db
 from robot_client import robot, RobotConnectionError
 from models import RegisterRequest, LoginRequest
-
 
 
 # ── Configuration ───────────────────────────────────────────────────────────
@@ -26,11 +26,33 @@ logging.basicConfig(level=LOG_LEVEL.upper())
 logger = logging.getLogger(__name__)
 
 
+def seed_admin(db):
+    existing = db.query(User).filter(User.username == "admin").first()
+    if not existing:
+        db.add(User(
+            username="admin",
+            hashed_password=hash_password("admin123"),
+            role="commander"
+        ))
+        db.commit()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db = next(get_db())
+    try:
+        seed_admin(db)
+        yield
+    finally:
+        db.close()
+
+
+
 # ── Application factory ────────────────────────────────────────────────────
 app = FastAPI(
     title="Ground Control Station",
     description="CMP9134 — Robot Management System scaffold",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
@@ -126,3 +148,4 @@ async def login(request: LoginRequest, db = Depends(get_db)):
     access_token = create_access_token(data={"sub": user.username})
     logger.info("User logged in: %s", request.username)
     return {"access_token": access_token, "token_type": "bearer"}
+
