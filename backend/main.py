@@ -2,6 +2,7 @@
 Ground Control Station — FastAPI application entry point.
 """
 
+import json
 import logging
 import os
 import asyncio
@@ -10,8 +11,8 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from auth import create_access_token, hash_password, require_commander, verify_password
-from database import User, get_db
+from auth import create_access_token, get_current_user, hash_password, require_commander, verify_password
+from database import MissionLog, User, get_db
 from robot_client import robot, RobotConnectionError
 from models import RegisterRequest, LoginRequest
 
@@ -87,24 +88,45 @@ async def get_status():
 async def move(
     x: int,
     y: int,
-    current_user: User = Depends(require_commander)
+    current_user: User = Depends(require_commander),
+    db=Depends(get_db),
 ):
+    logger.info("Move command from user %s: (%s, %s)", current_user.username, x, y)
+
+    outcome = "success"
+    result = None
     try:
-        logger.info(
-            "Move command from user %s: (%s, %s)",
-            current_user.username,
-            x,
-            y
-        )
-
-        return await robot.move(x, y)
-
+        result = await robot.move(x, y)
     except RobotConnectionError as exc:
         logger.warning("Move command failed: %s", exc)
-        raise HTTPException(status_code=503, detail=str(exc))
-    
-    
+        outcome = str(exc)
 
+    db.add(MissionLog(
+        username=current_user.username,
+        command="move",
+        parameters=json.dumps({"x": x, "y": y}),
+        outcome=outcome,
+    ))
+    db.commit()
+
+    if result is None:
+        raise HTTPException(status_code=503, detail=outcome)
+    return result
+    
+@app.get("/api/logs")
+async def get_logs(db=Depends(get_db), current_user: User = Depends(get_current_user)):
+    logs = db.query(MissionLog).order_by(MissionLog.timestamp.desc()).limit(50).all()
+    return [
+        {
+            "id": log.id,
+            "timestamp": log.timestamp,
+            "username": log.username,
+            "command": log.command,
+            "parameters": log.parameters,
+            "outcome": log.outcome,
+        }
+        for log in logs
+    ]
 
 # ── WebSocket telemetry ────────────────────────────────────────────────────
 @app.websocket("/ws/telemetry")
