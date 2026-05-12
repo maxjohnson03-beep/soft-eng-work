@@ -119,7 +119,7 @@ async def ws_telemetry(websocket: WebSocket):
         logger.info("Telemetry client disconnected")
 
 
-# ── User authentication (stub) ─────────────────────────────────────────────
+# ── User authentication ─────────────────────────────────────────────
 @app.post("/auth/register")
 async def register(request: RegisterRequest, db=Depends(get_db)):
     print("REGISTER ENDPOINT HIT WITH:", request.model_dump())
