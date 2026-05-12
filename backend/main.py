@@ -144,7 +144,6 @@ async def ws_telemetry(websocket: WebSocket):
 # ── User authentication ─────────────────────────────────────────────
 @app.post("/auth/register")
 async def register(request: RegisterRequest, db=Depends(get_db)):
-    print("REGISTER ENDPOINT HIT WITH:", request.model_dump())
     user = db.query(User).filter(User.username == request.username).first()
     if user:
         raise HTTPException(status_code=400, detail="Username already exists")
