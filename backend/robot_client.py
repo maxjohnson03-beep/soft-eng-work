@@ -81,5 +81,6 @@ class RobotClient:
             raise RobotConnectionError(f"Get sensors failed: {exc}") from exc
 
 
+
 # Module-level singleton used by main.py
 robot = RobotClient()

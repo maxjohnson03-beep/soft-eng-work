@@ -1,150 +1,946 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GCS — Dashboard</title>
+  <title>GCS — Ground Control Station</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+    :root {
+      --bg:        #070d1a;
+      --surface:   #0d1829;
+      --border:    #1a3050;
+      --accent:    #00c8ff;
+      --accent2:   #00ff9d;
+      --danger:    #ff3b3b;
+      --warn:      #ffab00;
+      --text:      #c8daf0;
+      --text-dim:  #4a6080;
+      --mono:      'Share Tech Mono', monospace;
+      --sans:      'Exo 2', sans-serif;
     }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #f4f6f9;
-      color: #0a2342;
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
     }
 
-    header {
-      background: #0a2342;
-      color: white;
-      padding: 0.75rem 1.5rem;
+    /* ── scanline overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* ════════════════════════════════════
+       LOGIN SCREEN
+    ════════════════════════════════════ */
+    #login-screen {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(0,200,255,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 50%, rgba(0,255,157,0.04) 0%, transparent 60%),
+        var(--bg);
     }
 
-    header h1 {
-      font-size: 1.1rem;
+    .login-box {
+      width: 380px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 2.5rem;
+      position: relative;
+    }
+
+    .login-box::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+
+    .login-logo {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 4px;
+      color: var(--accent);
+      margin-bottom: 0.4rem;
+    }
+
+    .login-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+      color: white;
+    }
+
+    .field-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
       letter-spacing: 2px;
+      color: var(--text-dim);
+      margin-bottom: 0.4rem;
     }
 
-    .conn-indicator {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      display: inline-block;
-      margin-right: 6px;
+    .field-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      padding: 0.6rem 0.8rem;
+      margin-bottom: 1.2rem;
+      outline: none;
+      transition: border-color 0.2s;
     }
 
-    .conn-indicator.ok {
-      background: #26a69a;
+    .field-input:focus {
+      border-color: var(--accent);
     }
 
-    .conn-indicator.error {
-      background: #c62828;
+    .btn {
+      width: 100%;
+      padding: 0.75rem;
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
     }
 
-    main {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 1rem;
-      padding: 1rem;
+    .btn:hover {
+      background: var(--accent);
+      color: var(--bg);
     }
 
-    .stat-card {
-      background: white;
-      border-radius: 8px;
-      padding: 1rem 1.2rem;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .login-error {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--danger);
+      margin-top: 0.8rem;
+      min-height: 1rem;
       text-align: center;
     }
 
-    .stat-card .label {
-      font-size: .72rem;
-      color: #5a6a85;
-      text-transform: uppercase;
+    /* ════════════════════════════════════
+       DASHBOARD
+    ════════════════════════════════════ */
+    #dashboard { display: none; flex-direction: column; min-height: 100vh; }
+
+    /* ── header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
 
-    .stat-card .value {
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .gcs-wordmark {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 4px;
+      color: var(--accent);
+    }
+
+    .header-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: white;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    /* connection pill */
+    .conn-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+    }
+
+    .conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      transition: background 0.3s;
+    }
+
+    .conn-dot.ok  { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+    .conn-dot.err { background: var(--danger);  box-shadow: 0 0 6px var(--danger); animation: blink 1s infinite; }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .logout-btn {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.3rem 0.6rem;
+      border: 1px solid var(--border);
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .logout-btn:hover { color: var(--danger); border-color: var(--danger); }
+
+    /* ── main grid ── */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 320px;
+      grid-template-rows: auto 1fr;
+      gap: 1px;
+      background: var(--border);
+      flex: 1;
+    }
+
+    .panel {
+      background: var(--surface);
+      padding: 1.2rem 1.5rem;
+    }
+
+    .panel-title {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 3px;
+      color: var(--accent);
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── stat cards ── */
+    .stats-panel {
+      grid-column: 1 / 3;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      padding: 0;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      padding: 1.2rem 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+
+    .stat-card.ok::after   { background: var(--accent2); }
+    .stat-card.warn::after { background: var(--warn); }
+    .stat-card.danger::after { background: var(--danger); }
+
+    .stat-label {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-family: var(--mono);
       font-size: 1.6rem;
-      font-weight: 700;
-      margin-top: 6px;
+      font-weight: 400;
+      color: white;
+      line-height: 1;
     }
 
-    .stat-card.warn .value {
-      color: #e8a020;
+    .stat-card.warn  .stat-value { color: var(--warn); }
+    .stat-card.danger .stat-value { color: var(--danger); }
+
+    /* ── signal lost overlay ── */
+    #signal-lost {
+      display: none;
+      position: fixed;
+      inset: 52px 0 0 0;
+      background: rgba(7,13,26,0.85);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1rem;
     }
 
-    .stat-card.danger .value {
-      color: #c62828;
+    #signal-lost.show { display: flex; }
+
+    .signal-lost-text {
+      font-family: var(--mono);
+      font-size: 1.5rem;
+      color: var(--danger);
+      letter-spacing: 4px;
+      animation: blink 1s infinite;
+    }
+
+    .signal-lost-sub {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+    }
+
+    /* ── map panel ── */
+    .map-panel { grid-column: 1; }
+
+    #robot-map {
+      width: 100%;
+      aspect-ratio: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* grid lines */
+    #robot-map::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 10% 10%;
+      opacity: 0.5;
+    }
+
+    #robot-dot {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent), 0 0 24px rgba(0,200,255,0.3);
+      transform: translate(-50%, -50%);
+      transition: left 0.4s ease, top 0.4s ease;
+      left: 50%; top: 50%;
+    }
+
+    #robot-dot::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      border: 1px solid var(--accent);
+      opacity: 0.5;
+      animation: ping 1.5s infinite;
+    }
+
+    @keyframes ping {
+      0%   { transform: scale(1); opacity: 0.5; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+
+    /* ── move controls ── */
+    .controls-panel { grid-column: 2; }
+
+    .move-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.8rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .coord-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      margin-bottom: 0.3rem;
+    }
+
+    .coord-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: white;
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      padding: 0.5rem 0.7rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .coord-input:focus { border-color: var(--accent); }
+
+    .move-btn {
+      width: 100%;
+      padding: 0.8rem;
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      letter-spacing: 3px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 0.6rem;
+    }
+
+    .move-btn:hover:not(:disabled) {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 20px rgba(0,200,255,0.3);
+    }
+
+    .move-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .reset-btn {
+      width: 100%;
+      padding: 0.6rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .reset-btn:hover { border-color: var(--warn); color: var(--warn); }
+
+    .move-feedback {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      margin-top: 0.8rem;
+      min-height: 1rem;
+      letter-spacing: 1px;
+    }
+
+    .move-feedback.ok  { color: var(--accent2); }
+    .move-feedback.err { color: var(--danger); }
+
+    /* ── audit log ── */
+    .log-panel {
+      grid-column: 3;
+      grid-row: 1 / 3;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .log-panel .panel-title { flex-shrink: 0; }
+
+    #log-table-wrap {
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    #log-table-wrap::-webkit-scrollbar { width: 4px; }
+    #log-table-wrap::-webkit-scrollbar-track { background: var(--bg); }
+    #log-table-wrap::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .log-entry {
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 0;
+      font-family: var(--mono);
+    }
+
+    .log-entry-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.2rem;
+    }
+
+    .log-cmd {
+      font-size: 0.75rem;
+      color: var(--accent);
+      letter-spacing: 1px;
+    }
+
+    .log-outcome {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 2px;
+    }
+
+    .log-outcome.ok  { background: rgba(0,255,157,0.1); color: var(--accent2); }
+    .log-outcome.err { background: rgba(255,59,59,0.1); color: var(--danger); }
+
+    .log-meta {
+      font-size: 0.62rem;
+      color: var(--text-dim);
+    }
+
+    .log-params {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      margin-top: 0.15rem;
+    }
+
+    .log-empty {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 2rem 0;
+      letter-spacing: 2px;
+    }
+
+    /* sensors panel */
+    .sensors-panel { grid-column: 1 / 3; }
+
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.8rem;
+    }
+
+    .sensor-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.8rem;
+    }
+
+    .sensor-name {
+      font-family: var(--mono);
+      font-size: 0.58rem;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      margin-bottom: 0.3rem;
+    }
+
+    .sensor-val {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
     }
   </style>
 </head>
-
 <body>
 
+<!-- ════════════ LOGIN SCREEN ════════════ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">GCS // CMP9134</div>
+    <div class="login-title">Ground Control Station</div>
+
+    <div class="field-label">USERNAME</div>
+    <input class="field-input" type="text" id="login-username" autocomplete="username" />
+
+    <div class="field-label">PASSWORD</div>
+    <input class="field-input" type="password" id="login-password" autocomplete="current-password" />
+
+    <button class="btn" id="login-btn" onclick="doLogin()">AUTHENTICATE</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ════════════ DASHBOARD ════════════ -->
+<div id="dashboard">
+
+  <!-- signal lost overlay -->
+  <div id="signal-lost">
+    <div class="signal-lost-text">⚠ SIGNAL LOST</div>
+    <div class="signal-lost-sub">ATTEMPTING TO RECONNECT…</div>
+  </div>
+
   <header>
-    <h1>⚙ GROUND CONTROL STATION</h1>
-    <div>
-      <span id="conn-dot" class="conn-indicator error"></span>
-      <span id="conn-label" style="font-size:.8rem;color:#ccc">Connecting…</span>
+    <div class="header-left">
+      <span class="gcs-wordmark">GCS</span>
+      <span class="header-title">GROUND CONTROL STATION</span>
+    </div>
+    <div class="header-right">
+      <div class="conn-pill">
+        <div class="conn-dot err" id="conn-dot"></div>
+        <span id="conn-label" style="color:var(--text-dim)">CONNECTING</span>
+      </div>
+      <span id="user-label" style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim)"></span>
+      <button class="logout-btn" onclick="doLogout()">LOGOUT</button>
     </div>
   </header>
 
-  <main>
-    <div class="stat-card" id="card-pos">
-      <div class="label">Position</div>
-      <div class="value" id="pos">—</div>
+  <div class="dashboard-grid">
+
+    <!-- stat cards row -->
+    <div class="stats-panel">
+      <div class="stat-card" id="card-pos">
+        <div class="stat-label">POSITION</div>
+        <div class="stat-value" id="pos">—</div>
+      </div>
+      <div class="stat-card" id="card-battery">
+        <div class="stat-label">BATTERY</div>
+        <div class="stat-value" id="battery">—</div>
+      </div>
+      <div class="stat-card" id="card-status">
+        <div class="stat-label">STATUS</div>
+        <div class="stat-value" style="font-size:1rem" id="robot-status">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">ROBOT ID</div>
+        <div class="stat-value" style="font-size:1rem" id="robot-id">—</div>
+      </div>
     </div>
-    <div class="stat-card" id="card-battery">
-      <div class="label">Battery</div>
-      <div class="value" id="battery">—</div>
+
+    <!-- log panel (spans 2 rows) -->
+    <div class="panel log-panel">
+      <div class="panel-title">MISSION LOG</div>
+      <div id="log-table-wrap">
+        <div class="log-empty" id="log-empty">NO ENTRIES</div>
+      </div>
     </div>
-    <div class="stat-card">
-      <div class="label">Status</div>
-      <div class="value" style="font-size:1.1rem" id="robot-status">—</div>
+
+    <!-- map -->
+    <div class="panel map-panel">
+      <div class="panel-title">POSITION MAP</div>
+      <div id="robot-map">
+        <div id="robot-dot"></div>
+      </div>
     </div>
-    <div class="stat-card">
-      <div class="label">Robot ID</div>
-      <div class="value" style="font-size:1rem" id="robot-id">—</div>
+
+    <!-- controls -->
+    <div class="panel controls-panel">
+      <div class="panel-title">MOVE COMMAND</div>
+      <div class="move-grid">
+        <div>
+          <div class="coord-label">X COORDINATE</div>
+          <input class="coord-input" type="number" id="move-x" value="0" />
+        </div>
+        <div>
+          <div class="coord-label">Y COORDINATE</div>
+          <input class="coord-input" type="number" id="move-y" value="0" />
+        </div>
+      </div>
+      <button class="move-btn" id="move-btn" onclick="doMove()">SEND MOVE COMMAND</button>
+      <button class="reset-btn" onclick="doReset()">RESET ROBOT</button>
+      <div class="move-feedback" id="move-feedback"></div>
     </div>
-  </main>
 
-  <script>
-    const $ = id => document.getElementById(id);
+  </div>
+</div>
 
-    async function poll() {
-      try {
-        const r = await fetch('/api/status');
-        if (!r.ok) throw new Error(r.statusText);
-        const d = await r.json();
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  let token = localStorage.getItem('gcs_token');
+  let currentUser = localStorage.getItem('gcs_user');
+  let robotOnline = false;
 
-        $('conn-dot').className = 'conn-indicator ok';
-        $('conn-label').textContent = 'Connected';
+  // Map bounds — robot API uses a coordinate system; adjust if needed
+  const MAP_MIN = -10, MAP_MAX = 10;
 
-        $('robot-id').textContent = d.id ?? '—';
-        $('pos').textContent = d.position ? `(${d.position.x}, ${d.position.y})` : '—';
-        $('robot-status').textContent = d.status ?? '—';
+  // ── Boot ─────────────────────────────────────────────────────────────────
+  if (token) {
+    showDashboard();
+  }
 
-        if (d.battery !== undefined) {
-          $('battery').textContent = `${d.battery.toFixed(1)}%`;
-          const card = $('card-battery');
-          card.className = 'stat-card' + (d.battery < 20 ? ' danger' : d.battery < 40 ? ' warn' : '');
-        }
-      } catch {
-        $('conn-dot').className = 'conn-indicator error';
-        $('conn-label').textContent = 'Unreachable';
-      }
+  // ── Login ────────────────────────────────────────────────────────────────
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  async function doLogin() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const btn = document.getElementById('login-btn');
+    const err = document.getElementById('login-error');
+
+    if (!username || !password) {
+      err.textContent = 'ENTER USERNAME AND PASSWORD';
+      return;
     }
 
-    poll();
-    setInterval(poll, 3000);
-  </script>
+    btn.disabled = true;
+    btn.textContent = 'AUTHENTICATING…';
+    err.textContent = '';
 
+    try {
+      const r = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!r.ok) {
+        err.textContent = r.status === 401 ? 'INVALID CREDENTIALS' : 'LOGIN FAILED';
+        return;
+      }
+
+      const d = await r.json();
+      token = d.access_token;
+      currentUser = username;
+      localStorage.setItem('gcs_token', token);
+      localStorage.setItem('gcs_user', username);
+      showDashboard();
+
+    } catch {
+      err.textContent = 'CANNOT REACH SERVER';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'AUTHENTICATE';
+    }
+  }
+
+  // ── Logout ───────────────────────────────────────────────────────────────
+  function doLogout() {
+    token = null;
+    currentUser = null;
+    localStorage.removeItem('gcs_token');
+    localStorage.removeItem('gcs_user');
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-error').textContent = '';
+  }
+
+  // ── Show dashboard ───────────────────────────────────────────────────────
+  function showDashboard() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'flex';
+    if (currentUser) {
+      document.getElementById('user-label').textContent = currentUser.toUpperCase();
+    }
+    startPolling();
+  }
+
+  // ── Status polling ───────────────────────────────────────────────────────
+  function startPolling() {
+    pollStatus();
+    pollLogs();
+    setInterval(pollStatus, 3000);
+    setInterval(pollLogs, 5000);
+  }
+
+  async function pollStatus() {
+    try {
+      const r = await fetch('/api/status');
+      if (!r.ok) throw new Error(r.statusText);
+      const d = await r.json();
+
+      if (d.error) throw new Error(d.error);
+
+      setConnected(true);
+
+      document.getElementById('robot-id').textContent = d.id ?? '—';
+      document.getElementById('robot-status').textContent = (d.status ?? '—').toUpperCase();
+
+      if (d.position) {
+        document.getElementById('pos').textContent = `${d.position.x}, ${d.position.y}`;
+        updateMap(d.position.x, d.position.y);
+      }
+
+      if (d.battery !== undefined) {
+        const pct = d.battery.toFixed(1);
+        document.getElementById('battery').textContent = `${pct}%`;
+        const card = document.getElementById('card-battery');
+        card.className = 'stat-card ' + (d.battery < 20 ? 'danger' : d.battery < 40 ? 'warn' : 'ok');
+      }
+
+    } catch {
+      setConnected(false);
+    }
+  }
+
+  function setConnected(ok) {
+    robotOnline = ok;
+    const dot = document.getElementById('conn-dot');
+    const label = document.getElementById('conn-label');
+    const overlay = document.getElementById('signal-lost');
+    const moveBtn = document.getElementById('move-btn');
+
+    dot.className = 'conn-dot ' + (ok ? 'ok' : 'err');
+    label.textContent = ok ? 'CONNECTED' : 'SIGNAL LOST';
+    label.style.color = ok ? 'var(--accent2)' : 'var(--danger)';
+    overlay.className = ok ? '' : 'show';
+    moveBtn.disabled = !ok;
+  }
+
+  // ── Map rendering ────────────────────────────────────────────────────────
+  function updateMap(x, y) {
+    // Convert robot coords to percentage position within the map div
+    const pctX = ((x - MAP_MIN) / (MAP_MAX - MAP_MIN)) * 100;
+    const pctY = 100 - ((y - MAP_MIN) / (MAP_MAX - MAP_MIN)) * 100; // invert Y
+    const dot = document.getElementById('robot-dot');
+    dot.style.left = `${Math.max(2, Math.min(98, pctX))}%`;
+    dot.style.top  = `${Math.max(2, Math.min(98, pctY))}%`;
+  }
+
+  // ── Move command ─────────────────────────────────────────────────────────
+  async function doMove() {
+    const x = parseInt(document.getElementById('move-x').value);
+    const y = parseInt(document.getElementById('move-y').value);
+    const feedback = document.getElementById('move-feedback');
+    const btn = document.getElementById('move-btn');
+
+    if (isNaN(x) || isNaN(y)) {
+      feedback.textContent = 'INVALID COORDINATES';
+      feedback.className = 'move-feedback err';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'TRANSMITTING…';
+    feedback.textContent = '';
+
+    try {
+      const r = await fetch(`/api/move?x=${x}&y=${y}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (r.status === 401) {
+        feedback.textContent = 'SESSION EXPIRED — PLEASE LOG IN AGAIN';
+        feedback.className = 'move-feedback err';
+        doLogout();
+        return;
+      }
+
+      if (r.status === 403) {
+        feedback.textContent = 'ACCESS DENIED — COMMANDER ROLE REQUIRED';
+        feedback.className = 'move-feedback err';
+        return;
+      }
+
+      if (r.status === 503) {
+        feedback.textContent = 'ROBOT UNREACHABLE — COMMAND NOT SENT';
+        feedback.className = 'move-feedback err';
+        return;
+      }
+
+      if (!r.ok) {
+        feedback.textContent = `ERROR ${r.status}`;
+        feedback.className = 'move-feedback err';
+        return;
+      }
+
+      feedback.textContent = `MOVE TO (${x}, ${y}) CONFIRMED`;
+      feedback.className = 'move-feedback ok';
+      pollLogs(); // refresh log immediately
+
+    } catch {
+      feedback.textContent = 'NETWORK ERROR';
+      feedback.className = 'move-feedback err';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'SEND MOVE COMMAND';
+    }
+  }
+
+  // ── Reset ────────────────────────────────────────────────────────────────
+  async function doReset() {
+    if (!confirm('Reset the robot simulation?')) return;
+    try {
+      await fetch('/api/reset', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      document.getElementById('move-feedback').textContent = 'ROBOT RESET';
+      document.getElementById('move-feedback').className = 'move-feedback ok';
+    } catch {
+      document.getElementById('move-feedback').textContent = 'RESET FAILED';
+      document.getElementById('move-feedback').className = 'move-feedback err';
+    }
+  }
+
+  // ── Audit log ────────────────────────────────────────────────────────────
+  async function pollLogs() {
+    if (!token) return;
+    try {
+      const r = await fetch('/api/logs', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!r.ok) return;
+      const logs = await r.json();
+      renderLogs(logs);
+    } catch {
+      // silently fail — status polling will show connection issues
+    }
+  }
+
+  function renderLogs(logs) {
+    const wrap = document.getElementById('log-table-wrap');
+    const empty = document.getElementById('log-empty');
+
+    if (!logs.length) {
+      empty.style.display = 'block';
+      return;
+    }
+
+    empty.style.display = 'none';
+
+    // Remove old entries
+    wrap.querySelectorAll('.log-entry').forEach(el => el.remove());
+
+    logs.forEach(log => {
+      const isOk = log.outcome === 'success';
+      const ts = new Date(log.timestamp + 'Z').toLocaleTimeString();
+
+      let params = '';
+      try {
+        const p = JSON.parse(log.parameters);
+        params = `x:${p.x} y:${p.y}`;
+      } catch { params = log.parameters; }
+
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `
+        <div class="log-entry-top">
+          <span class="log-cmd">${log.command.toUpperCase()}</span>
+          <span class="log-outcome ${isOk ? 'ok' : 'err'}">${isOk ? 'OK' : 'FAIL'}</span>
+        </div>
+        <div class="log-meta">${ts} · ${log.username}</div>
+        <div class="log-params">${params}</div>
+      `;
+      wrap.appendChild(entry);
+    });
+  }
+</script>
 </body>
-
 </html>

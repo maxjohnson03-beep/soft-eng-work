@@ -170,3 +170,10 @@ async def login(request: LoginRequest, db = Depends(get_db)):
     logger.info("User logged in: %s", request.username)
     return {"access_token": access_token, "token_type": "bearer"}
 
+@app.post("/api/reset")
+async def reset(current_user: User = Depends(require_commander)):
+    try:
+        return await robot.reset()
+    except RobotConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
