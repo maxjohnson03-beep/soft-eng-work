@@ -2,19 +2,22 @@
 Ground Control Station — FastAPI application entry point.
 """
 
+from __future__ import annotations
+
+import asyncio
 import json
 import logging
 import os
-import asyncio
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from auth import create_access_token, get_current_user, hash_password, require_commander, verify_password
 from database import MissionLog, User, get_db
-from robot_client import robot, RobotConnectionError
-from models import RegisterRequest, LoginRequest
+from models import LoginRequest, RegisterRequest
+from robot_client import RobotConnectionError, robot
 
 
 # ── Configuration ───────────────────────────────────────────────────────────
@@ -30,12 +33,15 @@ logger = logging.getLogger(__name__)
 def seed_admin(db):
     existing = db.query(User).filter(User.username == "admin").first()
     if not existing:
-        db.add(User(
-            username="admin",
-            hashed_password=hash_password("admin123"),
-            role="commander"
-        ))
+        db.add(
+            User(
+                username="admin",
+                hashed_password=hash_password("admin123"),
+                role="commander",
+            )
+        )
         db.commit()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,7 +51,6 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         db.close()
-
 
 
 # ── Application factory ────────────────────────────────────────────────────
@@ -69,28 +74,61 @@ app.add_middleware(
 
 # ── Health check ───────────────────────────────────────────────────────────
 @app.get("/health", include_in_schema=False)
-def health():
+def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# ── Robot status proxy ─────────────────────────────────────────────────────
+# ── User authentication ─────────────────────────────────────────────────────
+@app.post("/auth/register")
+async def register(request: RegisterRequest, db=Depends(get_db)) -> dict[str, str]:
+    user = db.query(User).filter(User.username == request.username).first()
+    if user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    hashed_password = hash_password(request.password)
+    db.add(
+        User(
+            username=request.username,
+            hashed_password=hashed_password,
+            role="viewer",
+        )
+    )
+    db.commit()
+
+    return {"message": "User registered successfully"}
+
+
+@app.post("/auth/login")
+async def login(request: LoginRequest, db=Depends(get_db)) -> dict[str, str]:
+    user = db.query(User).filter(User.username == request.username).first()
+    if not user or not verify_password(request.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+
+    access_token = create_access_token(data={"sub": user.username})
+    logger.info("User logged in: %s", request.username)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+# ── Robot endpoints ────────────────────────────────────────────────────────
 @app.get("/api/status")
-async def get_status():
+async def get_status() -> dict[str, Any]:
     try:
         return await robot.get_status()
     except RobotConnectionError as exc:
         logger.warning("Could not reach robot API: %s", exc)
-        return {"error": str(exc)}
+        raise HTTPException(status_code=503, detail=str(exc))
 
 
-# ── Move robot ─────────────────────────────────────────────────────────────
 @app.post("/api/move")
 async def move(
     x: int,
     y: int,
     current_user: User = Depends(require_commander),
     db=Depends(get_db),
-):
+) -> dict[str, Any]:
     logger.info("Move command from user %s: (%s, %s)", current_user.username, x, y)
 
     outcome = "success"
@@ -101,20 +139,39 @@ async def move(
         logger.warning("Move command failed: %s", exc)
         outcome = str(exc)
 
-    db.add(MissionLog(
-        username=current_user.username,
-        command="move",
-        parameters=json.dumps({"x": x, "y": y}),
-        outcome=outcome,
-    ))
+    db.add(
+        MissionLog(
+            username=current_user.username,
+            command="move",
+            parameters=json.dumps({"x": x, "y": y}),
+            outcome=outcome,
+        )
+    )
     db.commit()
 
     if result is None:
         raise HTTPException(status_code=503, detail=outcome)
     return result
-    
+
+
+@app.post("/api/reset")
+async def reset(current_user: User = Depends(require_commander)) -> dict[str, Any]:
+    try:
+        return await robot.reset()
+    except RobotConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get("/api/sensors")
+async def get_sensors() -> dict[str, Any]:
+    try:
+        return await robot.get_sensors()
+    except RobotConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
 @app.get("/api/logs")
-async def get_logs(db=Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_logs(db=Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict[str, Any]]:
     logs = db.query(MissionLog).order_by(MissionLog.timestamp.desc()).limit(50).all()
     return [
         {
@@ -128,9 +185,10 @@ async def get_logs(db=Depends(get_db), current_user: User = Depends(get_current_
         for log in logs
     ]
 
+
 # ── WebSocket telemetry ────────────────────────────────────────────────────
 @app.websocket("/ws/telemetry")
-async def ws_telemetry(websocket: WebSocket):
+async def ws_telemetry(websocket: WebSocket) -> None:
     await websocket.accept()
     try:
         while True:
@@ -139,41 +197,3 @@ async def ws_telemetry(websocket: WebSocket):
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:
         logger.info("Telemetry client disconnected")
-
-
-# ── User authentication ─────────────────────────────────────────────
-@app.post("/auth/register")
-async def register(request: RegisterRequest, db=Depends(get_db)):
-    user = db.query(User).filter(User.username == request.username).first()
-    if user:
-        raise HTTPException(status_code=400, detail="Username already exists")
-
-    hashed_password = hash_password(request.password)
-
-    new_user = User(
-        username=request.username,
-        hashed_password=hashed_password,
-        role="viewer"   
-    )
-
-    db.add(new_user)
-    db.commit()
-
-    return {"message": "User registered successfully"}
-
-@app.post("/auth/login")
-async def login(request: LoginRequest, db = Depends(get_db)):
-    user = db.query(User).filter(User.username == request.username).first()
-    if not user or not verify_password(request.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    access_token = create_access_token(data={"sub": user.username})
-    logger.info("User logged in: %s", request.username)
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/api/reset")
-async def reset(current_user: User = Depends(require_commander)):
-    try:
-        return await robot.reset()
-    except RobotConnectionError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-
