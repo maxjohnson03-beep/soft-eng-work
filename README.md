@@ -1,85 +1,106 @@
-# Ground Control Station — CMP9134 Starter Scaffold
+# Ground Control Station — CMP9134
 
-This repository provides a **starter scaffold** for the CMP9134 assessment.
-It gives you a working Docker Compose stack and a VS Code Dev Container so you
-can focus on implementing the required functionality rather than configuring
-infrastructure.
+A web-based Ground Control Station for monitoring and controlling a virtual robot, built for the CMP9134 Software Engineering assessment at the University of Lincoln.
 
-> **This is not a solution.** The backend contains only stub code. You must
-> implement authentication, robot control endpoints, mission logging, and the
-> frontend dashboard yourself.
+## Features
 
-## What is provided
-
-| Component | What you get |
-|-----------|-------------|
-| Virtual Robot API | Pre-built simulator image — do not modify |
-| FastAPI backend | Minimal scaffold with a `/health` endpoint and a basic `RobotClient` |
-| Nginx frontend | Static file server with `/api/` proxy pre-configured |
-| Docker Compose | Full stack orchestration (robot + backend + frontend) |
-| Dev Container | VS Code environment with the stack running automatically |
+- **Live dashboard** — real-time robot position, battery level, and connection status
+- **Move controls** — send coordinate commands to the robot with visual feedback
+- **Role-based access control** — viewer and commander roles enforced via JWT authentication
+- **Mission logging** — every command is persisted to a SQLite database with timestamp, user, and outcome
+- **Error handling** — retry logic with exponential backoff, Signal Lost indicator on robot dropout
+- **WebSocket telemetry** — real-time status stream from the backend
+- **Automated tests** — 20 tests across unit and integration layers, running in CI on every push
 
 ## Quick Start
 
 ```bash
-# 1. Fork / clone this repository
+# 1. Clone the repository
+git clone https://github.com/maxjohnson03-beep/soft-eng-work
 
-# 2. Start the full stack
+# 2. Copy the environment file
+cp .env.example .env
+
+# 3. Start the full stack
 docker compose up --build
 
-# 3. Open the dashboard (currently a placeholder)
+# 4. Open the dashboard
 open http://localhost:8080
 ```
 
 Default port: **8080**. Change via `GCS_PORT` in `.env`.
 
+## Default Credentials
+
+| Username | Password | Role |
+|----------|----------|------|
+| admin | admin123 | commander |
+
+Additional users can be registered via the dashboard. All registered users are assigned the viewer role.
+
 ## Architecture
 
 ```
-Browser → Nginx (frontend) → FastAPI (backend) → Robot API
+Browser → Nginx (port 8080) → FastAPI (port 8000) → Robot API (port 5000)
+                                      ↓
+                                 SQLite (gcs.db)
 ```
 
-The database service is **not active** by default. A commented-out PostgreSQL
-example is included in `docker-compose.yml` — uncomment and adapt it if your
-implementation requires persistent storage.
+Three containers orchestrated via Docker Compose:
+- **robot-api** — virtual robot simulator (provided)
+- **backend** — FastAPI application handling auth, business logic, and database
+- **frontend** — Nginx serving the static dashboard and proxying API requests
 
-## Development (recommended)
+## API Endpoints
 
-Open the repository in VS Code with the **Dev Containers** extension, then
-choose **"Reopen in Container"**. This starts the robot API and backend
-automatically with hot-reload enabled.
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | /health | None | Health check |
+| POST | /auth/register | None | Register a new viewer account |
+| POST | /auth/login | None | Login and receive JWT |
+| GET | /api/status | None | Robot status |
+| POST | /api/move | Commander | Send move command |
+| POST | /api/reset | Commander | Reset robot simulation |
+| GET | /api/sensors | None | Sensor readings |
+| GET | /api/logs | Authenticated | Mission log entries |
+| WS | /ws/telemetry | None | Real-time telemetry stream |
+
+## Running Tests
 
 ```bash
-# Run the backend with hot reload (inside devcontainer)
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+cd backend
+pip install -r requirements.txt
+pytest tests/ -v
 ```
-
-The interactive API docs are available at http://localhost:8000/docs while
-the backend is running.
-
-## What you need to implement
-
-Suggested areas (see the assessment brief for full requirements):
-
-- **Authentication** — e.g. JWT tokens, user registration/login
-- **Robot control endpoints** — move, reset, status, sensor data
-- **Mission logging** — record commands and outcomes (consider a database)
-- **WebSocket telemetry** — proxy the robot's real-time stream to the browser
-- **Frontend dashboard** — maps, controls, status display
 
 ## Project Structure
 
 ```
 ├── backend/
 │   ├── Dockerfile          # Multi-stage: base / development / production
-│   ├── main.py             # FastAPI stub — add your routes here
-│   ├── robot_client.py     # Basic robot HTTP client — extend as needed
-│   └── requirements.txt    # fastapi, uvicorn, httpx — add your dependencies
+│   ├── main.py             # FastAPI application — routes and business logic
+│   ├── auth.py             # JWT authentication and RBAC
+│   ├── database.py         # SQLAlchemy models (User, MissionLog)
+│   ├── robot_client.py     # Async robot HTTP client with retry logic
+│   ├── models.py           # Pydantic request models
+│   ├── requirements.txt    # Python dependencies
+│   └── tests/
+│       ├── conftest.py     # Test database setup and fixtures
+│       ├── test_api.py     # Integration tests
+│       └── test_auth.py    # Unit tests
 ├── frontend/
-│   ├── Dockerfile          # nginx serving static files
-│   ├── nginx.conf          # Proxies /api/ and /ws/ to the backend
-│   └── public/             # HTML/JS placeholder — replace with your dashboard
+│   ├── Dockerfile          # Nginx serving static files
+│   ├── nginx.conf          # Reverse proxy configuration
+│   └── public/
+│       └── index.html      # Dashboard — login, controls, map, audit log
 ├── .devcontainer/          # VS Code Dev Container configuration
-├── docker-compose.yml      # Stack orchestration (database section commented out)
-└── docs/report.md          # Assessment report template
+├── .github/workflows/      # GitHub Actions CI pipeline
+├── docker-compose.yml      # Stack orchestration
+└── .env.example            # Environment variable template
 ```
+
+## CI/CD
+
+GitHub Actions runs on every push to main and every pull request:
+1. **test** — runs pytest across Python 3.11 and 3.12
+2. **compose-test** — builds the full Docker stack and smoke tests the health endpoint
