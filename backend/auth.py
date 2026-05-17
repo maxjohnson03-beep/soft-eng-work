@@ -5,23 +5,29 @@ from database import User, get_db
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
+# ── Configuration ───────────────────────────────────────────────────────────
 SECRET_KEY = "changethislater"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-
+# ── Password hashing ────────────────────────────────────────────────────────
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
     bcrypt__default_rounds=12
 )
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
 
 def hash_password(plainpass):
     return pwd_context.hash(plainpass)
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
+
+
+# ── Token creation ──────────────────────────────────────────────────────────
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -33,6 +39,8 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
+# ── Token validation & user resolution ─────────────────────────────────────
 def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -47,6 +55,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
+
+# ── Role enforcement ────────────────────────────────────────────────────────
 def require_commander(current_user: User = Depends(get_current_user)):
     if current_user.role != "commander":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")

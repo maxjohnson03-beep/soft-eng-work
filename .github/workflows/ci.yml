@@ -99,7 +99,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # just a placeholder for your tests. Implement your actual test commands here, e.g. "pytest ..."
+      # # Runs the full test suite — unit tests (test_auth.py) and integration tests (test_api.py)
       - name: Run tests with coverage
         run: |
           pip install -r backend/requirements.txt

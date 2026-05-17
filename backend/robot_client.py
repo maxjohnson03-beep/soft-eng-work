@@ -1,6 +1,7 @@
 """
 Robot API client.
 
+Async wrapper around the Virtual Robot REST API with retry logic.
 """
 
 from __future__ import annotations
@@ -12,20 +13,26 @@ from typing import Any
 
 import httpx
 
+
+# ── Configuration ───────────────────────────────────────────────────────────
 ROBOT_API_URL = os.getenv("ROBOT_API_URL", "http://localhost:5000")
 
 logger = logging.getLogger(__name__)
 
 
+# ── Exceptions ──────────────────────────────────────────────────────────────
 class RobotConnectionError(Exception):
-    """Raised when a request to the robot API fails."""
+    """Raised when a request to the robot API fails after all retries."""
 
 
+# ── Client ──────────────────────────────────────────────────────────────────
 class RobotClient:
     """Async HTTP client for the Virtual Robot API."""
 
     def __init__(self, base_url: str = ROBOT_API_URL) -> None:
         self._base = base_url.rstrip("/")
+
+    # ── Public API ───────────────────────────────────────────────────────────
 
     async def get_status(self) -> dict[str, Any]:
         """Fetch current robot status (position, battery, state)."""
@@ -47,11 +54,25 @@ class RobotClient:
         """Fetch the robot's current sensor readings."""
         return await self._get("/api/sensor")
 
+    # ── Private helpers ──────────────────────────────────────────────────────
+
+    async def _get(self, path: str, **kwargs) -> dict[str, Any]:
+        return await self._request_with_retry("get", path, **kwargs)
+
+    async def _post(self, path: str, **kwargs) -> dict[str, Any]:
+        return await self._request_with_retry("post", path, **kwargs)
+
     async def _request_with_retry(
         self, method: str, path: str, **kwargs
     ) -> dict[str, Any]:
+        """Make an HTTP request with exponential backoff retry logic.
+
+        Retries up to 3 times on failure, waiting 2s, 4s between attempts.
+        Raises RobotConnectionError if all attempts fail.
+        """
         url = f"{self._base}{path}"
         max_attempts = 3
+
         for attempt in range(max_attempts):
             try:
                 async with httpx.AsyncClient() as client:
@@ -72,11 +93,7 @@ class RobotClient:
                 )
                 await asyncio.sleep(wait)
 
-    async def _get(self, path: str, **kwargs) -> dict[str, Any]:
-        return await self._request_with_retry("get", path, **kwargs)
 
-    async def _post(self, path: str, **kwargs) -> dict[str, Any]:
-        return await self._request_with_retry("post", path, **kwargs)
-
-
+# ── Module-level singleton ───────────────────────────────────────────────────
+# Shared across all requests — Singleton pattern
 robot = RobotClient()
